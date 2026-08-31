@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Arrow Escape Puzzle</title>
+<style>
+  :root{
+    --bg-top:#EAF6FF;
+    --bg-bottom:#FDF6FF;
+    --ink:#25324B;
+    --card:#FFFFFF;
+    --up:#FF6B6B;
+    --down:#06B6D4;
+    --left:#FFB020;
+    --right:#7C5CFF;
+    --success:#2ECC71;
+    --shadow: 0 6px 16px rgba(37,50,75,0.12);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent; user-select:none;}
+  html,body{
+    margin:0; padding:0; height:100%;
+    font-family: -apple-system, "SF Pro Rounded", "Nunito", "Segoe UI", Roboto, sans-serif;
+    background: radial-gradient(circle at 50% 0%, var(--bg-top), var(--bg-bottom) 70%);
+    color: var(--ink);
+    overflow:hidden;
+  }
+  #app{
+    display:flex; flex-direction:column; align-items:center;
+    height:100%; width:100%; padding: 14px 12px 20px;
+  }
+  header{
+    width:100%; max-width:480px;
+    display:flex; justify-content:space-between; align-items:center;
+    margin-bottom:10px;
+  }
+  .brand{
+    font-size:22px; font-weight:800; letter-spacing:-0.5px;
+  }
+  .brand span{color:var(--right);}
+  .stats{
+    display:flex; gap:10px;
+  }
+  .pill{
+    background:var(--card); border-radius:999px; padding:6px 14px;
+    box-shadow: var(--shadow); font-weight:700; font-size:14px;
+    display:flex; align-items:center; gap:6px;
+  }
+  .pill small{font-weight:600; color:#8892A6; font-size:11px;}
+
+  #boardWrap{
+    flex:1; width:100%; max-width:480px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #board{
+    display:grid;
+    gap:6px;
+    width:100%;
+    aspect-ratio: var(--aspect, 1);
+  }
+  .cell{
+    position:relative;
+    border-radius:14px;
+  }
+  .arrow{
+    position:absolute; inset:0;
+    border-radius:14px;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow: var(--shadow);
+    border:none;
+    cursor:pointer;
+    transition: transform .16s ease;
+    padding:0;
+  }
+  .arrow.up{background: linear-gradient(145deg, var(--up), #ff8f8f);}
+  .arrow.down{background: linear-gradient(145deg, var(--down), #4fd8e8);}
+  .arrow.left{background: linear-gradient(145deg, var(--left), #ffcb66);}
+  .arrow.right{background: linear-gradient(145deg, var(--right), #a396ff);}
+
+  .arrow-icon{
+    width:46%;
+    height:46%;
+    background:#ffffff;
+    clip-path: polygon(50% 4%, 88% 44%, 66% 44%, 66% 96%, 34% 96%, 34% 44%, 12% 44%);
+    filter: drop-shadow(0 2px 2px rgba(0,0,0,0.15));
+  }
+  .arrow-icon.up{transform:rotate(0deg);}
+  .arrow-icon.right{transform:rotate(90deg);}
+  .arrow-icon.down{transform:rotate(180deg);}
+  .arrow-icon.left{transform:rotate(270deg);}
+
+  .arrow:active{transform:scale(0.9);}
+
+  @keyframes shake{
+    0%,100%{transform:translateX(0);}
+    20%{transform:translateX(-6px) rotate(-4deg);}
+    40%{transform:translateX(6px) rotate(4deg);}
+    60%{transform:translateX(-4px) rotate(-2deg);}
+    80%{transform:translateX(4px) rotate(2deg);}
+  }
+  .arrow.blocked{animation: shake .35s ease;}
+
+  .arrow.clear-up{transform: translateY(-140%) scale(0.6); opacity:0;}
+  .arrow.clear-down{transform: translateY(140%) scale(0.6); opacity:0;}
+  .arrow.clear-left{transform: translateX(-140%) scale(0.6); opacity:0;}
+  .arrow.clear-right{transform: translateX(140%) scale(0.6); opacity:0;}
+  .arrow.leaving{transition: transform .28s ease, opacity .28s ease;}
+
+  footer{
+    width:100%; max-width:480px;
+    display:flex; justify-content:center; gap:10px;
+    margin-top:14px;
+  }
+  .btn{
+    border:none; border-radius:14px; padding:12px 20px;
+    font-weight:800; font-size:14px; cursor:pointer;
+    box-shadow: var(--shadow);
+    background: var(--card); color: var(--ink);
+  }
+  .btn.primary{
+    background: linear-gradient(145deg, var(--right), #a396ff);
+    color:white;
+  }
+
+  #overlay{
+    position:fixed; inset:0; background:rgba(37,50,75,0.55);
+    display:none; align-items:center; justify-content:center; z-index:10;
+  }
+  #overlay.show{display:flex;}
+  .modal{
+    background:var(--card); border-radius:22px; padding:28px 26px;
+    text-align:center; width:min(320px, 86vw);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.25);
+  }
+  .modal h2{margin:0 0 6px; font-size:22px;}
+  .modal p{margin:0 0 18px; color:#71798e; font-size:14px;}
+  .modal .btn{width:100%; margin-top:8px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">Arrow<span>Escape</span></div>
+    <div class="stats">
+      <div class="pill"><small>LVL</small> <span id="levelNum">1</span></div>
+      <div class="pill"><small>LEFT</small> <span id="remainingNum">0</span></div>
+      <div class="pill"><small>MOVES</small> <span id="movesNum">0</span></div>
+    </div>
+  </header>
+
+  <div id="boardWrap">
+    <div id="board"></div>
+  </div>
+
+  <footer>
+    <button class="btn" id="restartBtn">Restart</button>
+    <button class="btn primary" id="newBtn">New Board</button>
+  </footer>
+</div>
+
+<div id="overlay">
+  <div class="modal">
+    <h2 id="modalTitle">Level Cleared!</h2>
+    <p id="modalText">Nice work — every arrow found its way out.</p>
+    <button class="btn primary" id="nextBtn">Next Level</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  const LEVELS = [
+    {rows:5, cols:5, density:0.55},
+    {rows:5, cols:6, density:0.58},
+    {rows:6, cols:6, density:0.6},
+    {rows:6, cols:7, density:0.62},
+    {rows:7, cols:7, density:0.63},
+    {rows:7, cols:8, density:0.64},
+    {rows:8, cols:8, density:0.66},
+  ];
+
+  const boardEl = document.getElementById('board');
+  const levelNumEl = document.getElementById('levelNum');
+  const remainingNumEl = document.getElementById('remainingNum');
+  const movesNumEl = document.getElementById('movesNum');
+  const overlay = document.getElementById('overlay');
+  const modalTitle = document.getElementById('modalTitle');
+  const modalText = document.getElementById('modalText');
+
+  let level = 1;
+  let rows, cols;
+  let board = {}; // "r,c" -> dir
+  let total = 0;
+  let moves = 0;
+
+  const DIRS = ['up','down','left','right'];
+  const DELTA = { up:[-1,0], down:[1,0], left:[0,-1], right:[0,1] };
+
+  function shuffle(arr){
+    for(let i=arr.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [arr[i],arr[j]] = [arr[j],arr[i]];
+    }
+    return arr;
+  }
+
+  function pathClear(r,c,dir,rows,cols,state){
+    const [dr,dc] = DELTA[dir];
+    let rr=r+dr, cc=c+dc;
+    while(rr>=0 && rr<rows && cc>=0 && cc<cols){
+      if(state[rr+','+cc]) return false;
+      rr+=dr; cc+=dc;
+    }
+    return true;
+  }
+
+  function generateLevel(rows, cols, density){
+    const cells = [];
+    for(let r=0;r<rows;r++) for(let c=0;c<cols;c++) cells.push([r,c]);
+    shuffle(cells);
+    const count = Math.max(4, Math.floor(rows*cols*density));
+    const positions = cells.slice(0, count);
+
+    const placed = {}; // represents higher-order (already placed) arrows while building
+    const dirs = new Array(count).fill(null);
+
+    for(let i=count-1; i>=0; i--){
+      const [r,c] = positions[i];
+      const valid = DIRS.filter(d => pathClear(r,c,d,rows,cols,placed));
+      const dir = valid.length ? valid[Math.floor(Math.random()*valid.length)] : DIRS[Math.floor(Math.random()*4)];
+      dirs[i] = dir;
+      placed[r+','+c] = dir;
+    }
+
+    const result = {};
+    for(let i=0;i<count;i++){
+      const [r,c] = positions[i];
+      result[r+','+c] = dirs[i];
+    }
+    return result;
+  }
+
+  function startLevel(){
+    const cfg = LEVELS[Math.min(level-1, LEVELS.length-1)];
+    // beyond predefined levels, keep scaling difficulty slightly
+    if(level > LEVELS.length){
+      const extra = level - LEVELS.length;
+      rows = Math.min(9, cfg.rows + Math.floor(extra/3));
+      cols = Math.min(9, cfg.cols + Math.floor(extra/3));
+    } else {
+      rows = cfg.rows; cols = cfg.cols;
+    }
+    const density = Math.min(0.7, cfg.density + (level > LEVELS.length ? 0.01*(level-LEVELS.length) : 0));
+    board = generateLevel(rows, cols, density);
+    total = Object.keys(board).length;
+    moves = 0;
+    render();
+    updateStats();
+  }
+
+  function render(){
+    boardEl.style.setProperty('--aspect', cols+'/'+rows);
+    boardEl.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+    boardEl.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+    boardEl.innerHTML = '';
+    for(let r=0;r<rows;r++){
+      for(let c=0;c<cols;c++){
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        const key = r+','+c;
+        if(board[key]){
+          const dir = board[key];
+          const btn = document.createElement('button');
+          btn.className = 'arrow ' + dir;
+          const icon = document.createElement('span');
+          icon.className = 'arrow-icon ' + dir;
+          btn.appendChild(icon);
+          btn.dataset.r = r;
+          btn.dataset.c = c;
+          btn.addEventListener('click', onArrowTap);
+          cell.appendChild(btn);
+        }
+        boardEl.appendChild(cell);
+      }
+    }
+  }
+
+  function onArrowTap(e){
+    const btn = e.currentTarget;
+    const r = parseInt(btn.dataset.r), c = parseInt(btn.dataset.c);
+    const key = r+','+c;
+    const dir = board[key];
+    if(!dir) return;
+
+    moves++;
+    updateStats();
+
+    if(pathClear(r,c,dir,rows,cols,board)){
+      delete board[key];
+      btn.classList.add('leaving', 'clear-'+dir);
+      btn.removeEventListener('click', onArrowTap);
+      setTimeout(()=>{ btn.remove(); }, 280);
+      updateStats();
+      if(Object.keys(board).length === 0){
+        setTimeout(showLevelComplete, 320);
+      }
+    } else {
+      btn.classList.remove('blocked');
+      void btn.offsetWidth;
+      btn.classList.add('blocked');
+    }
+  }
+
+  function updateStats(){
+    levelNumEl.textContent = level;
+    remainingNumEl.textContent = Object.keys(board).length;
+    movesNumEl.textContent = moves;
+  }
+
+  function showLevelComplete(){
+    modalTitle.textContent = 'Level ' + level + ' Cleared!';
+    modalText.textContent = 'Cleared in ' + moves + ' moves. Ready for the next one?';
+    overlay.classList.add('show');
+  }
+
+  document.getElementById('nextBtn').addEventListener('click', ()=>{
+    overlay.classList.remove('show');
+    level++;
+    startLevel();
+  });
+
+  document.getElementById('restartBtn').addEventListener('click', ()=>{
+    board = JSON.parse(JSON.stringify(startBoardSnapshot));
+    total = Object.keys(board).length;
+    moves = 0;
+    render();
+    updateStats();
+  });
+
+  document.getElementById('newBtn').addEventListener('click', ()=>{
+    startLevel();
+  });
+
+  let startBoardSnapshot = {};
+  const origGenerate = generateLevel;
+  // wrap startLevel to keep a snapshot for restart
+  const origStart = startLevel;
+  window.__startLevel = function(){
+    origStart();
+    startBoardSnapshot = JSON.parse(JSON.stringify(board));
+  };
+
+  window.__startLevel();
+})();
+</script>
+</body>
+</html>
